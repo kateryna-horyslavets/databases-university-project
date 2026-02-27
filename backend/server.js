@@ -15,110 +15,75 @@ const dbConfig = {
 };
 
 app.get('/', (req, res) => {
-    res.send('API працює. Доступні endpoints: /api/tables, /api/table-structure/:name, /api/table-data/:name');
+    res.send('API працює');
 });
 
-app.get('/api/tables', async (req, res) => {
+app.post('/api/query', async (req, res) => {
     try {
+        const { action, tableName, data, recordId } = req.body;
         const connection = await mysql.createConnection(dbConfig);
-        const [tableRows] = await connection.execute('SHOW TABLES');
-        const tables = tableRows.map(row => Object.values(row)[0]);
-        await connection.end();
-        res.json(tables);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.get('/api/table-structure/:name', async (req, res) => {
-    try {
-        const connection = await mysql.createConnection(dbConfig);
-        const tableName = req.params.name;
-        const [columns] = await connection.execute(`DESCRIBE ${tableName}`);
-        await connection.end();
-        res.json(columns);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.get('/api/table-data/:name', async (req, res) => {
-    try {
-        const connection = await mysql.createConnection(dbConfig);
-        const tableName = req.params.name;
-        const [data] = await connection.execute(`SELECT * FROM ${tableName}`);
-        await connection.end();
-        res.json(data);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.post('/api/table-data/:name', async (req, res) => {
-    try {
-        const connection = await mysql.createConnection(dbConfig);
-        const tableName = req.params.name;
-        const data = req.body;
         
-        const columns = Object.keys(data).join(', ');
-        const placeholders = Object.keys(data).map(() => '?').join(', ');
-        const values = Object.values(data);
+        let result;
         
-        const query = `INSERT INTO ${tableName} (${columns}) VALUES (${placeholders})`;
-        const [result] = await connection.execute(query, values);
-        
-        await connection.end();
-        res.json({ success: true, insertId: result.insertId });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.put('/api/table-data/:name/:id', async (req, res) => {
-    try {
-        const connection = await mysql.createConnection(dbConfig);
-        const tableName = req.params.name;
-        const id = req.params.id;
-        const data = req.body;
-
-        const [columns] = await connection.execute(`DESCRIBE ${tableName}`);
-        const primaryKey = columns.find(col => col.Key === 'PRI')?.Field;
-        
-        if (!primaryKey) {
-            throw new Error('Не знайдено первинний ключ в таблиці');
+        switch (action) {
+            case 'getTables':
+                const [tableRows] = await connection.execute('SHOW TABLES');
+                result = tableRows.map(row => Object.values(row)[0]);
+                break;
+                
+            case 'getStructure':
+                const [columns] = await connection.execute(`DESCRIBE ${tableName}`);
+                result = columns;
+                break;
+                
+            case 'getData':
+                const [tableData] = await connection.execute(`SELECT * FROM ${tableName}`);
+                result = tableData;
+                break;
+                
+            case 'insert':
+                const cols = Object.keys(data).join(', ');
+                const placeholders = Object.keys(data).map(() => '?').join(', ');
+                const values = Object.values(data);
+                const insertQuery = `INSERT INTO ${tableName} (${cols}) VALUES (${placeholders})`;
+                const [insertResult] = await connection.execute(insertQuery, values);
+                result = { success: true, insertId: insertResult.insertId };
+                break;
+                
+            case 'update':
+                const [updateColumns] = await connection.execute(`DESCRIBE ${tableName}`);
+                const primaryKey = updateColumns.find(col => col.Key === 'PRI')?.Field;
+                
+                if (!primaryKey) {
+                    throw new Error('Не знайдено первинний ключ');
+                }
+                
+                const setClause = Object.keys(data).map(key => `${key} = ?`).join(', ');
+                const updateValues = [...Object.values(data), recordId];
+                const updateQuery = `UPDATE ${tableName} SET ${setClause} WHERE ${primaryKey} = ?`;
+                await connection.execute(updateQuery, updateValues);
+                result = { success: true };
+                break;
+                
+            case 'delete':
+                const [deleteColumns] = await connection.execute(`DESCRIBE ${tableName}`);
+                const deletePK = deleteColumns.find(col => col.Key === 'PRI')?.Field;
+                
+                if (!deletePK) {
+                    throw new Error('Не знайдено первинний ключ');
+                }
+                
+                const deleteQuery = `DELETE FROM ${tableName} WHERE ${deletePK} = ?`;
+                await connection.execute(deleteQuery, [recordId]);
+                result = { success: true };
+                break;
+                
+            default:
+                throw new Error('Невідома дія');
         }
         
-        const setClause = Object.keys(data).map(key => `${key} = ?`).join(', ');
-        const values = [...Object.values(data), id];
-        
-        const query = `UPDATE ${tableName} SET ${setClause} WHERE ${primaryKey} = ?`;
-        await connection.execute(query, values);
-        
         await connection.end();
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.delete('/api/table-data/:name/:id', async (req, res) => {
-    try {
-        const connection = await mysql.createConnection(dbConfig);
-        const tableName = req.params.name;
-        const id = req.params.id;
-
-        const [columns] = await connection.execute(`DESCRIBE ${tableName}`);
-        const primaryKey = columns.find(col => col.Key === 'PRI')?.Field;
-        
-        if (!primaryKey) {
-            throw new Error('Не знайдено первинний ключ в таблиці');
-        }
-        
-        const query = `DELETE FROM ${tableName} WHERE ${primaryKey} = ?`;
-        await connection.execute(query, [id]);
-        
-        await connection.end();
-        res.json({ success: true });
+        res.json(result);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

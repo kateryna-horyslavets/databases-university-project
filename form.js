@@ -1,4 +1,4 @@
-const API_URL = 'http://127.0.0.1:5000/api';
+const API_URL = 'http://127.0.0.1:5000/api/query';
 
 let currentTable = '';
 let currentOperation = '';
@@ -10,13 +10,30 @@ async function init() {
     setupEventListeners();
 }
 
+async function postRequest(action, params = {}) {
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action, ...params })
+        });
+        
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Помилка сервера');
+        }
+        
+        return await res.json();
+    } catch (err) {
+        throw err;
+    }
+}
+
 async function loadTables() {
     try {
-        const res = await fetch(`${API_URL}/tables`);
-        if (!res.ok) throw new Error('Помилка отримання списку таблиць');
-        
-        const tables = await res.json();
+        const tables = await postRequest('getTables');
         const tableSelect = document.getElementById('tableSelect');
+        tableSelect.innerHTML = '<option value="">-- Оберіть таблицю --</option>';
         
         tables.forEach(table => {
             const option = document.createElement('option');
@@ -53,10 +70,7 @@ function handleOperationChange(e) {
 
 async function loadTableStructure() {
     try {
-        const res = await fetch(`${API_URL}/table-structure/${currentTable}`);
-        if (!res.ok) throw new Error('Помилка отримання структури таблиці');
-        
-        tableStructure = await res.json();
+        tableStructure = await postRequest('getStructure', { tableName: currentTable });
     } catch (err) {
         showError('Помилка завантаження структури: ' + err.message);
     }
@@ -64,10 +78,7 @@ async function loadTableStructure() {
 
 async function loadTableData() {
     try {
-        const res = await fetch(`${API_URL}/table-data/${currentTable}`);
-        if (!res.ok) throw new Error('Помилка отримання даних');
-        
-        tableData = await res.json();
+        tableData = await postRequest('getData', { tableName: currentTable });
         return tableData;
     } catch (err) {
         showError('Помилка завантаження даних: ' + err.message);
@@ -119,12 +130,12 @@ async function showSelectResults() {
             <div class="scroll-wrapper">
                 <table>
                     <thead><tr>`;
-
+    
     Object.keys(data[0]).forEach(key => {
         html += `<th>${key}</th>`;
     });
     html += `</tr></thead><tbody>`;
-
+    
     data.forEach(row => {
         html += `<tr>`;
         Object.values(row).forEach(val => {
@@ -146,7 +157,6 @@ function showInsertForm() {
             <form id="insertForm" class="data-form">`;
     
     tableStructure.forEach(col => {
-
         if (col.Extra === 'auto_increment') return;
         
         const required = col.Null === 'NO' ? 'required' : '';
@@ -313,20 +323,10 @@ async function handleInsert(e) {
     }
     
     try {
-        const res = await fetch(`${API_URL}/table-data/${currentTable}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        
-        if (!res.ok) {
-            const error = await res.json();
-            throw new Error(error.error);
-        }
-        
+        await postRequest('insert', { tableName: currentTable, data });
         showSuccess('Запис успішно додано!');
         e.target.reset();
-
+        
         if (document.getElementById('resultArea').innerHTML) {
             await showSelectResults();
         }
@@ -349,19 +349,9 @@ async function handleUpdate(e, recordId) {
     }
     
     try {
-        const res = await fetch(`${API_URL}/table-data/${currentTable}/${recordId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        
-        if (!res.ok) {
-            const error = await res.json();
-            throw new Error(error.error);
-        }
-        
+        await postRequest('update', { tableName: currentTable, data, recordId });
         showSuccess('Запис успішно оновлено!');
-
+        
         if (document.getElementById('resultArea').innerHTML) {
             await showSelectResults();
         }
@@ -376,19 +366,11 @@ async function handleDelete(recordId) {
     }
     
     try {
-        const res = await fetch(`${API_URL}/table-data/${currentTable}/${recordId}`, {
-            method: 'DELETE'
-        });
-        
-        if (!res.ok) {
-            const error = await res.json();
-            throw new Error(error.error);
-        }
-        
+        await postRequest('delete', { tableName: currentTable, recordId });
         showSuccess('Запис успішно видалено!');
         
         await showDeleteForm();
-
+        
         if (document.getElementById('resultArea').innerHTML) {
             await showSelectResults();
         }
