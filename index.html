@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Керування базою даних bd_horyslavets</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>База даних</h1>
+        <div class="control-panel">
+            <div class="control-group">
+                <label for="tableSelect">Оберіть таблицю:</label>
+                <select id="tableSelect">
+                    <option value="">-- Оберіть таблицю --</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="operationSelect">Оберіть операцію:</label>
+                <select id="operationSelect">
+                    <option value="">-- Оберіть операцію --</option>
+                    <option value="select">SELECT - Переглянути дані</option>
+                    <option value="insert">INSERT - Додати запис</option>
+                    <option value="update">UPDATE - Оновити запис</option>
+                    <option value="delete">DELETE - Видалити запис</option>
+                </select>
+            </div>
+            
+            <button id="executeBtn" class="btn-execute">Виконати</button>
+        </div>
+
+        <div id="resultArea"></div>
+        <div id="formArea"></div>
+    </div>
+
+    <script src="form.js"></script>
+</body>
+</html>
