@@ -185,44 +185,46 @@ function showInsertForm() {
 }
 
 async function showUpdateForm() {
-    const data = await loadTableData();
+    const primaryKey = tableStructure.find(col => col.Key === 'PRI')?.Field;
     
-    if (data.length === 0) {
-        showError('Таблиця порожня. Немає записів для оновлення.');
+    if (!primaryKey) {
+        showError('У цій таблиці немає первинного ключа для оновлення.');
         return;
     }
     
-    const primaryKey = tableStructure.find(col => col.Key === 'PRI')?.Field;
-    
     const formArea = document.getElementById('formArea');
-    
     let html = `
         <div class="form-card">
             <div class="form-title">Оновити запис</div>
             <div class="form-group">
-                <label for="recordSelect">Оберіть запис для оновлення:</label>
-                <select id="recordSelect" class="record-select">
-                    <option value="">-- Оберіть запис --</option>`;
-    
-    data.forEach(row => {
-        const displayText = Object.entries(row)
-            .slice(0, 3)
-            .map(([key, val]) => `${key}: ${formatValue(val)}`)
-            .join(' | ');
-        html += `<option value="${row[primaryKey]}">${displayText}</option>`;
-    });
-    
-    html += `
-                </select>
+                <label for="searchId">Введіть ${primaryKey} (ключове поле) для пошуку:</label>
+                <div style="display: flex; gap: 15px; max-width: 450px; margin-top: 8px; align-items: stretch;">
+                    <input type="text" id="searchId" placeholder="Введіть значення..." style="flex: 1; margin: 0;">
+                    <button id="searchBtn" class="btn-execute" style="padding: 10px 25px;">Знайти</button>
+                </div>
             </div>
-            <div id="updateFormFields"></div>
+            <div id="updateFormFields" style="margin-top: 25px;"></div>
         </div>`;
     
     formArea.innerHTML = html;
     
-    document.getElementById('recordSelect').addEventListener('change', function(e) {
-        if (e.target.value) {
-            showUpdateFields(e.target.value, data);
+    document.getElementById('searchBtn').addEventListener('click', async function() {
+        const searchId = document.getElementById('searchId').value.trim();
+        
+        if (!searchId) {
+            showError('Будь ласка, введіть значення для пошуку!');
+            return;
+        }
+        
+        const data = await loadTableData();
+        const recordExists = data.some(row => String(row[primaryKey]) === String(searchId));
+        
+        if (recordExists) {
+            document.getElementById('resultArea').innerHTML = '';
+            showUpdateFields(searchId, data);
+        } else {
+            document.getElementById('updateFormFields').innerHTML = '';
+            showError('Запис не знайдено. Будь ласка, перевірте введене значення і спробуйте знову.');
         }
     });
 }
@@ -265,14 +267,12 @@ function showUpdateFields(recordId, data) {
 }
 
 async function showDeleteForm() {
-    const data = await loadTableData();
+    const primaryKey = tableStructure.find(col => col.Key === 'PRI')?.Field;
     
-    if (data.length === 0) {
-        showError('Таблиця порожня. Немає записів для видалення.');
+    if (!primaryKey) {
+        showError('У цій таблиці немає первинного ключа для видалення.');
         return;
     }
-    
-    const primaryKey = tableStructure.find(col => col.Key === 'PRI')?.Field;
     
     const formArea = document.getElementById('formArea');
     
@@ -280,35 +280,52 @@ async function showDeleteForm() {
         <div class="form-card">
             <div class="form-title">Видалити запис</div>
             <div class="form-group">
-                <label for="deleteSelect">Оберіть запис для видалення:</label>
-                <select id="deleteSelect" class="record-select">
-                    <option value="">-- Оберіть запис --</option>`;
-    
-    data.forEach(row => {
-        const displayText = Object.entries(row)
-            .slice(0, 3)
-            .map(([key, val]) => `${key}: ${formatValue(val)}`)
-            .join(' | ');
-        html += `<option value="${row[primaryKey]}">${displayText}</option>`;
-    });
-    
-    html += `
-                </select>
+                <label for="deleteId">Введіть ${primaryKey} (ключове поле) для видалення:</label>
+                <div style="display: flex; gap: 15px; max-width: 450px; margin-top: 8px; align-items: stretch;">
+                    <input type="text" id="deleteId" placeholder="Введіть значення..." style="flex: 1; margin: 0;">
+                    <button id="deleteSearchBtn" class="btn-execute" style="padding: 10px 25px;">Знайти</button>
+                </div>
             </div>
-            <button id="deleteBtn" class="btn-delete" disabled>Видалити запис</button>
+            <div id="deleteFormFields" style="margin-top: 25px;"></div>
         </div>`;
     
     formArea.innerHTML = html;
     
-    const deleteSelect = document.getElementById('deleteSelect');
-    const deleteBtn = document.getElementById('deleteBtn');
-    
-    deleteSelect.addEventListener('change', function() {
-        deleteBtn.disabled = !this.value;
-    });
-    
-    deleteBtn.addEventListener('click', function() {
-        handleDelete(deleteSelect.value);
+    document.getElementById('deleteSearchBtn').addEventListener('click', async function() {
+        const deleteId = document.getElementById('deleteId').value.trim();
+        
+        if (!deleteId) {
+            showError('Будь ласка, введіть значення для пошуку!');
+            return;
+        }
+        
+        const data = await loadTableData();
+        const record = data.find(row => String(row[primaryKey]) === String(deleteId));
+        
+        if (record) {
+            document.getElementById('resultArea').innerHTML = '';
+            
+            // Формуємо текст для попереднього перегляду знайденого запису
+            const displayText = Object.entries(record)
+                .slice(0, 5) // показуємо перші 5 колонок для ідентифікації
+                .map(([key, val]) => `<strong>${key}:</strong> ${formatValue(val)}`)
+                .join('<br>');
+                
+            document.getElementById('deleteFormFields').innerHTML = `
+                <div class="info-message" style="background: #f8fafc; color: #334155; border-left-color: #94a3b8; margin-bottom: 20px;">
+                    <p style="margin-bottom: 10px;"><strong>Знайдено запис:</strong></p>
+                    <div style="margin-bottom: 15px;">${displayText}</div>
+                    <button id="confirmDeleteBtn" class="btn-delete">Видалити цей запис</button>
+                </div>
+            `;
+            
+            document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
+                handleDelete(deleteId);
+            });
+        } else {
+            document.getElementById('deleteFormFields').innerHTML = '';
+            showError('Такого запису немає');
+        }
     });
 }
 
@@ -324,12 +341,11 @@ async function handleInsert(e) {
     
     try {
         await postRequest('insert', { tableName: currentTable, data });
-        showSuccess('Запис успішно додано!');
         e.target.reset();
-        
-        if (document.getElementById('resultArea').innerHTML) {
-            await showSelectResults();
-        }
+
+        await showSelectResults();
+
+        showSuccess('Запис успішно додано!');
     } catch (err) {
         showError('Помилка додавання: ' + err.message);
     }
@@ -350,11 +366,12 @@ async function handleUpdate(e, recordId) {
     
     try {
         await postRequest('update', { tableName: currentTable, data, recordId });
-        showSuccess('Запис успішно оновлено!');
         
-        if (document.getElementById('resultArea').innerHTML) {
+        if (document.querySelector('.table-card')) {
             await showSelectResults();
         }
+        
+        showSuccess('Запис успішно оновлено!');
     } catch (err) {
         showError('Помилка оновлення: ' + err.message);
     }
@@ -367,13 +384,14 @@ async function handleDelete(recordId) {
     
     try {
         await postRequest('delete', { tableName: currentTable, recordId });
-        showSuccess('Запис успішно видалено!');
         
         await showDeleteForm();
         
-        if (document.getElementById('resultArea').innerHTML) {
+        if (document.querySelector('.table-card')) {
             await showSelectResults();
         }
+        
+        showSuccess('Запис успішно видалено!');
     } catch (err) {
         showError('Помилка видалення: ' + err.message);
     }
